@@ -16,6 +16,9 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+	EventId int
+	Me      int
+	Request any
 }
 
 // A server (i.e., ../server.go) that wants to replicate itself calls
@@ -37,6 +40,7 @@ type RSM struct {
 	applyCh      chan raftapi.ApplyMsg
 	maxraftstate int // snapshot if log grows this big
 	sm           StateMachine
+	eventId      int
 	// Your definitions here.
 }
 
@@ -61,6 +65,7 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 		maxraftstate: maxraftstate,
 		applyCh:      make(chan raftapi.ApplyMsg),
 		sm:           sm,
+		id:
 	}
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
@@ -72,6 +77,12 @@ func (rsm *RSM) Raft() raftapi.Raft {
 	return rsm.rf
 }
 
+func (rsm *RSM) channelReader() {
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+	//read the applyCh channel here and send outputs if any to DoOp
+}
+
 // Submit a command to Raft, and wait for it to be committed.  It
 // should return ErrWrongLeader if client should find new leader and
 // try again.
@@ -81,6 +92,10 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
 	// is the argument to Submit and id is a unique id for the op.
 
+	//need to call raft.start here
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+	currentOp := Op{EventId: ,Me: rsm.me, Request: req}
 	// your code here
 	return rpc.ErrWrongLeader, nil // i'm dead, try another server.
 }
