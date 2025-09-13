@@ -8,7 +8,7 @@ package raft
 
 import (
 	"bytes"
-	"kvraft/labgob"
+	"kvraft/src/labgob"
 	"log"
 	//	"bytes"
 	"math/rand"
