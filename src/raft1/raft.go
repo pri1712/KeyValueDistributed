@@ -120,13 +120,6 @@ type RequestVoteReply struct {
 	VoteGranted bool //if vote was given or not to the current candidate.
 }
 
-type DummyArgs struct {
-	Me int
-}
-type DummyReply struct {
-	CommitIndex int
-}
-
 // return CurrentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
