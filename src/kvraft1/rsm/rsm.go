@@ -33,14 +33,19 @@ type StateMachine interface {
 	Restore([]byte)
 }
 
+type pendingEntry struct {
+	EventId int
+	ch      chan any
+}
+
 type RSM struct {
-	mu           sync.Mutex
-	me           int
-	rf           raftapi.Raft
-	applyCh      chan raftapi.ApplyMsg
-	maxraftstate int // snapshot if log grows this big
-	sm           StateMachine
-	eventId      int
+	mu             sync.Mutex
+	me             int
+	rf             raftapi.Raft
+	applyCh        chan raftapi.ApplyMsg
+	maxraftstate   int // snapshot if log grows this big
+	sm             StateMachine
+	currenteventId int
 	// Your definitions here.
 }
 
@@ -65,11 +70,11 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 		maxraftstate: maxraftstate,
 		applyCh:      make(chan raftapi.ApplyMsg),
 		sm:           sm,
-		id:
 	}
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
 	}
+	go rsm.channelReader() //reads the applych to check for committed ops.
 	return rsm
 }
 
@@ -95,7 +100,13 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	//need to call raft.start here
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
-	currentOp := Op{EventId: ,Me: rsm.me, Request: req}
+	currentOp := Op{EventId: rsm.currenteventId, Me: rsm.me, Request: req}
+	rsm.currenteventId++
+	index, _, isLeader := rsm.rf.Start(currentOp)
+	if !isLeader {
+		return rpc.ErrWrongLeader, nil
+	}
 	// your code here
+
 	return rpc.ErrWrongLeader, nil // i'm dead, try another server.
 }
