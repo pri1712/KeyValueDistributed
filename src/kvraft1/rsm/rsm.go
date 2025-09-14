@@ -3,7 +3,9 @@ package rsm
 import (
 	raft "kvraft/src/raft1"
 	tester "kvraft/src/tester1"
+	"log"
 	"sync"
+	"time"
 
 	"kvraft/src/kvsrv1/rpc"
 	"kvraft/src/labrpc"
@@ -16,6 +18,9 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+	EventId int
+	Me      int
+	Request any
 }
 
 // A server (i.e., ../server.go) that wants to replicate itself calls
@@ -30,13 +35,25 @@ type StateMachine interface {
 	Restore([]byte)
 }
 
+type pendingEntry struct {
+	EventId int
+	ch      chan pendingResult
+}
+
+type pendingResult struct {
+	Err rpc.Err
+	Val any
+}
+
 type RSM struct {
-	mu           sync.Mutex
-	me           int
-	rf           raftapi.Raft
-	applyCh      chan raftapi.ApplyMsg
-	maxraftstate int // snapshot if log grows this big
-	sm           StateMachine
+	mu             sync.Mutex
+	me             int
+	rf             raftapi.Raft
+	applyCh        chan raftapi.ApplyMsg
+	maxraftstate   int // snapshot if log grows this big
+	sm             StateMachine
+	currenteventId int
+	pendingMap     map[int]*pendingEntry
 	// Your definitions here.
 }
 
@@ -61,15 +78,58 @@ func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, m
 		maxraftstate: maxraftstate,
 		applyCh:      make(chan raftapi.ApplyMsg),
 		sm:           sm,
+		pendingMap:   make(map[int]*pendingEntry),
 	}
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
 	}
+	go rsm.channelReader() //reads the applych to check for committed ops.
 	return rsm
 }
 
 func (rsm *RSM) Raft() raftapi.Raft {
 	return rsm.rf
+}
+
+func (rsm *RSM) channelReader() {
+
+	//read the applyCh channel here and send outputs if any to DoOp
+	for {
+		select {
+		case msg := <-rsm.applyCh:
+			//if we get something on the apply channel from raft.
+			if msg.CommandValid {
+				appliedOperation, ok := msg.Command.(Op)
+				if !ok {
+					continue
+				}
+				finalResult := rsm.sm.DoOp(appliedOperation.Request)
+				rsm.mu.Lock()
+				log.Printf("applied op eventid: %v", appliedOperation.EventId)
+				log.Printf("msg command index: %v", msg.CommandIndex)
+				entry, exists := rsm.pendingMap[msg.CommandIndex]
+				log.Printf("entry is %v", entry)
+				log.Printf("entry exists: %v", exists)
+				if !exists {
+					log.Printf("cannot find the same eventId in map")
+					rsm.mu.Unlock()
+					continue
+				} else {
+					if entry.EventId != appliedOperation.EventId {
+						entry.ch <- pendingResult{Err: rpc.ErrWrongLeader, Val: nil}
+					} else {
+						entry.ch <- pendingResult{Err: rpc.OK, Val: finalResult}
+					}
+					//delete entry pertaining to this index from the map.
+					delete(rsm.pendingMap, msg.CommandIndex)
+					rsm.mu.Unlock()
+				}
+			} else if msg.SnapshotValid {
+				log.Printf("Snapshot is valid")
+				continue
+			}
+		}
+	}
 }
 
 // Submit a command to Raft, and wait for it to be committed.  It
@@ -80,7 +140,26 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	// Submit creates an Op structure to run a command through Raft;
 	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
 	// is the argument to Submit and id is a unique id for the op.
-
-	// your code here
-	return rpc.ErrWrongLeader, nil // i'm dead, try another server.
+	//need to call raft.start here
+	rsm.mu.Lock()
+	eventId := rsm.currenteventId
+	rsm.currenteventId++
+	rsm.mu.Unlock()
+	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
+	index, _, isLeader := rsm.rf.Start(currentOp)
+	if !isLeader {
+		return rpc.ErrWrongLeader, nil
+	}
+	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
+	rsm.mu.Lock()
+	rsm.pendingMap[index] = &pending //mapping index to eventID.
+	rsm.mu.Unlock()
+	select {
+	case res := <-pending.ch:
+		//if the reader sent errwrong leader return that, else return the result from DoOp.
+		return res.Err, res.Val
+	case <-time.After(1 * time.Second):
+		delete(rsm.pendingMap, index)
+		return rpc.ErrWrongLeader, nil
+	}
 }
