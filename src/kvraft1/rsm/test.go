@@ -2,6 +2,8 @@ package rsm
 
 import (
 	"fmt"
+	"log"
+
 	//"log"
 	"sync"
 	"testing"
@@ -97,6 +99,7 @@ func (ts *Test) onePartition(p []int, req any) any {
 func (ts *Test) oneInc() *IncRep {
 	rep := ts.onePartition(nil, Inc{})
 	if rep == nil {
+		log.Printf("nil issue is in rsm_test")
 		return nil
 	}
 	return rep.(*IncRep)
@@ -127,7 +130,7 @@ func (ts *Test) checkCounter(v int, nsrv int) {
 	}
 	err := fmt.Sprintf("checkCounter: only %d srvs have %v instead of %d", n, v, nsrv)
 	tester.AnnotateCheckerFailure(err, err)
-	ts.Fatalf(err)
+	ts.t.Fatal(err)
 }
 
 func (ts *Test) countValue(v int) int {

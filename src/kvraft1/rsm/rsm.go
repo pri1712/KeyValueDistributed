@@ -5,6 +5,7 @@ import (
 	tester "kvraft/src/tester1"
 	"log"
 	"sync"
+	"time"
 
 	"kvraft/src/kvsrv1/rpc"
 	"kvraft/src/labrpc"
@@ -36,7 +37,12 @@ type StateMachine interface {
 
 type pendingEntry struct {
 	EventId int
-	ch      chan any
+	ch      chan pendingResult
+}
+
+type pendingResult struct {
+	Err rpc.Err
+	Val any
 }
 
 type RSM struct {
@@ -97,20 +103,26 @@ func (rsm *RSM) channelReader() {
 				if !ok {
 					continue
 				}
-				rsm.mu.Lock()
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
-				entry, exists := rsm.pendingMap[appliedOperation.EventId]
+				rsm.mu.Lock()
+				log.Printf("applied op eventid: %v", appliedOperation.EventId)
+				log.Printf("msg command index: %v", msg.CommandIndex)
+				entry, exists := rsm.pendingMap[msg.CommandIndex]
+				log.Printf("entry is %v", entry)
+				log.Printf("entry exists: %v", exists)
 				if !exists {
 					log.Printf("cannot find the same eventId in map")
+					rsm.mu.Unlock()
 					continue
 				} else {
 					if entry.EventId != appliedOperation.EventId {
-						entry.ch <- rpc.ErrWrongLeader
+						entry.ch <- pendingResult{Err: rpc.ErrWrongLeader, Val: nil}
 					} else {
-						entry.ch <- finalResult
+						entry.ch <- pendingResult{Err: rpc.OK, Val: finalResult}
 					}
 					//delete entry pertaining to this index from the map.
 					delete(rsm.pendingMap, msg.CommandIndex)
+					rsm.mu.Unlock()
 				}
 			} else if msg.SnapshotValid {
 				log.Printf("Snapshot is valid")
@@ -128,23 +140,26 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	// Submit creates an Op structure to run a command through Raft;
 	// for example: op := Op{Me: rsm.me, Id: id, Req: req}, where req
 	// is the argument to Submit and id is a unique id for the op.
-
 	//need to call raft.start here
 	rsm.mu.Lock()
-	defer rsm.mu.Unlock()
-	currentOp := Op{EventId: rsm.currenteventId, Me: rsm.me, Request: req}
-	eventId := currentOp.EventId
+	eventId := rsm.currenteventId
 	rsm.currenteventId++
+	rsm.mu.Unlock()
+	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
 	index, _, isLeader := rsm.rf.Start(currentOp)
 	if !isLeader {
 		return rpc.ErrWrongLeader, nil
 	}
-	pending := pendingEntry{EventId: eventId, ch: make(chan any, 1)}
+	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
+	rsm.mu.Lock()
 	rsm.pendingMap[index] = &pending //mapping index to eventID.
+	rsm.mu.Unlock()
 	select {
 	case res := <-pending.ch:
 		//if the reader sent errwrong leader return that, else return the result from DoOp.
-
+		return res.Err, res.Val
+	case <-time.After(1 * time.Second):
+		delete(rsm.pendingMap, index)
+		return rpc.ErrWrongLeader, nil
 	}
-	return rpc.ErrWrongLeader, nil // i'm dead, try another server.
 }
