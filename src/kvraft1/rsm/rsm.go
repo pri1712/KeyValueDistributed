@@ -117,16 +117,21 @@ func (rsm *RSM) channelReader() {
 				} else {
 					ch := entry.ch
 					term := entry.LeaderTerm
-					currentTerm, isLeader := rsm.rf.GetState()
+					currentTerm, _ := rsm.rf.GetState()
+					var out pendingResult
 					log.Printf("current term is: %v and we are comp with : %v", currentTerm, term)
-					if entry.EventId != appliedOperation.EventId || currentTerm != term || !isLeader {
+					if entry.EventId != appliedOperation.EventId {
 						//different command has appeared at the index replied by start or the term has changed.
-						ch <- pendingResult{Err: rpc.ErrWrongLeader, Val: nil}
+						log.Printf("not the leader")
+						out = pendingResult{Err: rpc.ErrWrongLeader, Val: nil}
 					} else {
-						ch <- pendingResult{Err: rpc.OK, Val: finalResult}
+						out = pendingResult{Err: rpc.OK, Val: finalResult}
 					}
+					ch <- out
 					rsm.mu.Lock()
-					delete(rsm.pendingMap, msg.CommandIndex)
+					if cur, ok := rsm.pendingMap[msg.CommandIndex]; ok && cur == entry {
+						delete(rsm.pendingMap, msg.CommandIndex)
+					}
 					rsm.mu.Unlock()
 				}
 			} else if msg.SnapshotValid {
