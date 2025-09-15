@@ -978,6 +978,11 @@ func (rf *Raft) StartElection() {
 }
 
 func (rf *Raft) applier() {
+	if rf.killed() {
+		rf.mu.Lock()
+		close(rf.ApplicationChanel)
+		rf.mu.Unlock()
+	}
 	for !rf.killed() {
 		rf.mu.Lock()
 		for rf.LastApplied >= rf.CommitIndex && !rf.killed() {
