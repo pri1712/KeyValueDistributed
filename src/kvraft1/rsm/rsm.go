@@ -1,15 +1,13 @@
 package rsm
 
 import (
+	"kvraft/src/kvsrv1/rpc"
+	"kvraft/src/labrpc"
 	raft "kvraft/src/raft1"
+	"kvraft/src/raftapi"
 	tester "kvraft/src/tester1"
 	"log"
 	"sync"
-	"time"
-
-	"kvraft/src/kvsrv1/rpc"
-	"kvraft/src/labrpc"
-	"kvraft/src/raftapi"
 )
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
@@ -112,9 +110,6 @@ func (rsm *RSM) channelReader() {
 				log.Printf("msg command index: %v", msg.CommandIndex)
 				rsm.mu.Lock()
 				entry, exists := rsm.pendingMap[msg.CommandIndex]
-				if exists {
-					delete(rsm.pendingMap, msg.CommandIndex)
-				}
 				rsm.mu.Unlock()
 				if !exists {
 					log.Printf("cannot find the same eventId in map")
@@ -126,12 +121,13 @@ func (rsm *RSM) channelReader() {
 					log.Printf("current term is: %v and we are comp with : %v", currentTerm, term)
 					if entry.EventId != appliedOperation.EventId || currentTerm != term || !isLeader {
 						//different command has appeared at the index replied by start or the term has changed.
-						log.Printf("here")
 						ch <- pendingResult{Err: rpc.ErrWrongLeader, Val: nil}
 					} else {
 						ch <- pendingResult{Err: rpc.OK, Val: finalResult}
 					}
-					//delete entry pertaining to this index from the map.
+					rsm.mu.Lock()
+					delete(rsm.pendingMap, msg.CommandIndex)
+					rsm.mu.Unlock()
 				}
 			} else if msg.SnapshotValid {
 				log.Printf("Snapshot is valid")
@@ -169,11 +165,11 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 		//log.Printf("in case 1")
 		log.Printf("res: %v,%v", res.Err, res.Val)
 		return res.Err, res.Val
-	case <-time.After(1200 * time.Millisecond):
-		rsm.mu.Lock()
-		delete(rsm.pendingMap, index)
-		rsm.mu.Unlock()
-		//log.Printf("in case 2")
-		return rpc.ErrWrongLeader, nil
+		//case <-time.After(time.Second):
+		//	rsm.mu.Lock()
+		//	delete(rsm.pendingMap, index)
+		//	rsm.mu.Unlock()
+		//	//log.Printf("in case 2")
+
 	}
 }
