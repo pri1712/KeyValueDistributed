@@ -159,6 +159,7 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	rsm.currenteventId++
 	rsm.mu.Unlock()
 	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
+	log.Printf("operation %v submitted", currentOp)
 	index, _, isLeader := rsm.rf.Start(currentOp)
 	if !isLeader {
 		return rpc.ErrWrongLeader, nil
