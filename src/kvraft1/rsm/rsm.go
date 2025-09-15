@@ -34,9 +34,8 @@ type StateMachine interface {
 }
 
 type pendingEntry struct {
-	EventId    int
-	LeaderTerm int
-	ch         chan pendingResult
+	EventId int
+	ch      chan pendingResult
 }
 
 type pendingResult struct {
@@ -100,6 +99,11 @@ func (rsm *RSM) channelReader() {
 				log.Println("channel reader closed")
 				return
 			}
+			log.Printf("channel reader got msg details as follows;"+
+				" msg command index : %v"+
+				" msg command valid : %v"+
+				" msg command details : %v", msg.CommandIndex, msg.CommandValid, msg.Command.(Op),
+			)
 			if msg.CommandValid {
 				appliedOperation, ok := msg.Command.(Op)
 				if !ok {
@@ -107,19 +111,17 @@ func (rsm *RSM) channelReader() {
 				}
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
 				log.Printf("applied op eventid: %v", appliedOperation.EventId)
-				log.Printf("msg command index: %v", msg.CommandIndex)
+				//log.Printf("msg command index: %v", msg.CommandIndex)
 				rsm.mu.Lock()
-				entry, exists := rsm.pendingMap[msg.CommandIndex]
+				entry, exists := rsm.pendingMap[msg.CommandIndex] //checking if it exists in the pending map.
 				rsm.mu.Unlock()
 				if !exists {
+					log.Printf("msg.commandIndex: %v", msg.CommandIndex)
 					log.Printf("cannot find the same eventId in map")
 					continue
 				} else {
 					ch := entry.ch
-					term := entry.LeaderTerm
-					currentTerm, _ := rsm.rf.GetState()
 					var out pendingResult
-					log.Printf("current term is: %v and we are comp with : %v", currentTerm, term)
 					if entry.EventId != appliedOperation.EventId {
 						//different command has appeared at the index replied by start or the term has changed.
 						log.Printf("not the leader")
@@ -130,6 +132,7 @@ func (rsm *RSM) channelReader() {
 					ch <- out
 					rsm.mu.Lock()
 					if cur, ok := rsm.pendingMap[msg.CommandIndex]; ok && cur == entry {
+						log.Printf("deleting %v", msg.CommandIndex)
 						delete(rsm.pendingMap, msg.CommandIndex)
 					}
 					rsm.mu.Unlock()
@@ -156,25 +159,23 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	rsm.currenteventId++
 	rsm.mu.Unlock()
 	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
-	index, term, isLeader := rsm.rf.Start(currentOp)
+	index, _, isLeader := rsm.rf.Start(currentOp)
 	if !isLeader {
 		return rpc.ErrWrongLeader, nil
 	}
-	pending := pendingEntry{EventId: eventId, LeaderTerm: term, ch: make(chan pendingResult, 1)}
+	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
 	rsm.mu.Lock()
 	rsm.pendingMap[index] = &pending //mapping index to eventID.
 	rsm.mu.Unlock()
-	select {
-	case res := <-pending.ch:
-		//if the reader sent errwrong leader return that, else return the result from DoOp.
-		//log.Printf("in case 1")
-		log.Printf("res: %v,%v", res.Err, res.Val)
-		return res.Err, res.Val
-		//case <-time.After(time.Second):
-		//	rsm.mu.Lock()
-		//	delete(rsm.pendingMap, index)
-		//	rsm.mu.Unlock()
-		//	//log.Printf("in case 2")
 
-	}
+	res := <-pending.ch
+	//if the reader sent errwrong leader return that, else return the result from DoOp.
+	log.Printf("res: %v,%v", res.Err, res.Val)
+	return res.Err, res.Val
+	//case <-time.After(time.Second):
+	//	rsm.mu.Lock()
+	//	delete(rsm.pendingMap, index)
+	//	rsm.mu.Unlock()
+	//	//log.Printf("in case 2")
+
 }
