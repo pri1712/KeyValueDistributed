@@ -166,7 +166,8 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	}
 	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
 	rsm.mu.Lock()
-	rsm.pendingMap[index] = &pending //mapping index to eventID.
+	rsm.pendingMap[index] = &pending //mapping index to eventID. so we can check if the same eventId got inserted at
+	//that index.
 	rsm.mu.Unlock()
 
 	res := <-pending.ch
