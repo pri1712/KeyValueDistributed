@@ -8,6 +8,7 @@ import (
 	tester "kvraft/src/tester1"
 	"log"
 	"sync"
+	"time"
 )
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
@@ -110,7 +111,7 @@ func (rsm *RSM) channelReader() {
 					continue
 				}
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
-				log.Printf("applied op eventid: %v", appliedOperation.EventId)
+				//log.Printf("applied op eventid: %v", appliedOperation.EventId)
 				//log.Printf("msg command index: %v", msg.CommandIndex)
 				rsm.mu.Lock()
 				entry, exists := rsm.pendingMap[msg.CommandIndex] //checking if it exists in the pending map.
@@ -159,21 +160,29 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	rsm.currenteventId++
 	rsm.mu.Unlock()
 	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
+	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
 	log.Printf("operation %v submitted", currentOp)
+	rsm.mu.Lock()
 	index, _, isLeader := rsm.rf.Start(currentOp)
+	log.Printf("index where it will get inserted is: %v", index)
 	if !isLeader {
+		//only works if the leader is not alone in a partition, if it is it wont know about new terms.
+		rsm.mu.Unlock()
 		return rpc.ErrWrongLeader, nil
 	}
-	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
-	rsm.mu.Lock()
 	rsm.pendingMap[index] = &pending //mapping index to eventID. so we can check if the same eventId got inserted at
 	//that index.
 	rsm.mu.Unlock()
 
-	res := <-pending.ch
-	//if the reader sent errwrong leader return that, else return the result from DoOp.
-	log.Printf("res: %v,%v", res.Err, res.Val)
-	return res.Err, res.Val
+	select {
+	case res := <-pending.ch:
+		return res.Err, res.Val
+	case <-time.After(2 * time.Second):
+		rsm.mu.Lock()
+		delete(rsm.pendingMap, index)
+		rsm.mu.Unlock()
+		return rpc.ErrWrongLeader, nil
+	}
 	//case <-time.After(time.Second):
 	//	rsm.mu.Lock()
 	//	delete(rsm.pendingMap, index)
