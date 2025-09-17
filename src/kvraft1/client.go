@@ -35,6 +35,7 @@ type GetClientReply struct {
 type PutClientArgs struct {
 	Key       string
 	Val       string
+	Version   rpc.Tversion
 	ClientId  int64
 	RequestId int64
 }
@@ -126,7 +127,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
-			request := &PutClientArgs{Key: key, Val: value, ClientId: clientId, RequestId: requestId}
+			request := &PutClientArgs{Key: key, Val: value, ClientId: clientId, RequestId: requestId, Version: version}
 			reply := &PutClientReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers)
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Put", request, reply)
