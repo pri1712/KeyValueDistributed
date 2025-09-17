@@ -21,9 +21,10 @@ type Clerk struct {
 }
 
 type GetClientArgs struct {
-	Key       string
-	ClientId  int64
-	RequestId int64
+	Key         string
+	ClientId    int64
+	RequestId   int64
+	CommandType int //0 for get 1 for put
 }
 
 type GetClientReply struct {
@@ -33,11 +34,12 @@ type GetClientReply struct {
 }
 
 type PutClientArgs struct {
-	Key       string
-	Val       string
-	Version   rpc.Tversion
-	ClientId  int64
-	RequestId int64
+	Key         string
+	Val         string
+	Version     rpc.Tversion
+	ClientId    int64
+	RequestId   int64
+	CommandType int //0 for get 1 for put
 }
 
 type PutClientReply struct {
@@ -75,7 +77,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
-			request := &GetClientArgs{Key: key, ClientId: clientId, RequestId: requestId}
+			request := &GetClientArgs{Key: key, ClientId: clientId, RequestId: requestId, CommandType: 0}
 			reply := &GetClientReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers) //first call the last leader then subsequent ones.
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Get", request, reply)
@@ -127,7 +129,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
-			request := &PutClientArgs{Key: key, Val: value, ClientId: clientId, RequestId: requestId, Version: version}
+			request := &PutClientArgs{Key: key, Val: value, ClientId: clientId, RequestId: requestId, Version: version, CommandType: 1}
 			reply := &PutClientReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers)
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Put", request, reply)

@@ -38,10 +38,11 @@ type ValueTuple struct {
 // https://go.dev/tour/methods/16
 // https://go.dev/tour/methods/15
 func (kv *KVServer) DoOp(req any) any {
-	// Your code here
 	//this is where the updation and returning of data must happen.
+	//log.Printf("req type is: %T", req) this just returns rsm.op type.
+	log.Printf("req type is: %T", req)
 	switch args := req.(type) {
-	case *GetClientArgs:
+	case GetClientArgs:
 		kv.mu.Lock()
 		defer kv.mu.Unlock()
 		valueTuple, exists := kv.KeyValueStore[args.Key]
@@ -55,7 +56,7 @@ func (kv *KVServer) DoOp(req any) any {
 			reply.Version = valueTuple.Version
 		}
 		return reply
-	case *PutClientArgs:
+	case PutClientArgs:
 		kv.mu.Lock()
 		defer kv.mu.Unlock()
 		valueTuple, exists := kv.KeyValueStore[args.Key]
@@ -79,6 +80,7 @@ func (kv *KVServer) DoOp(req any) any {
 		return reply
 	default:
 		log.Printf("Unknown command %v", req)
+		log.Printf("args type is: %T", args)
 		return nil
 	}
 

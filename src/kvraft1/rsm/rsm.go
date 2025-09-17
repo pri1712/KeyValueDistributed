@@ -17,9 +17,10 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-	EventId int
-	Me      int
-	Request any
+	EventId     int
+	Me          int
+	Request     any
+	RequestType int
 }
 
 // A server (i.e., ../server.go) that wants to replicate itself calls
