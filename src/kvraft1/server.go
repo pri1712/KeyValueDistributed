@@ -40,32 +40,35 @@ type ValueTuple struct {
 func (kv *KVServer) DoOp(req any) any {
 	//this is where the updation and returning of data must happen.
 	//log.Printf("req type is: %T", req) this just returns rsm.op type.
-	log.Printf("req type is: %T", req)
+	//log.Printf("req type is: %T", req)
 	switch args := req.(type) {
-	case GetClientArgs:
+	case *rpc.GetArgs:
+		//log.Printf("get args is %v", args)
 		kv.mu.Lock()
 		defer kv.mu.Unlock()
 		valueTuple, exists := kv.KeyValueStore[args.Key]
-		var reply GetClientReply
+		var reply rpc.GetReply
 		if !exists {
 			log.Printf("Does not exist in the map GET")
 			reply.Err = rpc.ErrNoKey
 		} else {
 			reply.Err = rpc.OK
-			reply.Val = valueTuple.Val
+			reply.Value = valueTuple.Val
 			reply.Version = valueTuple.Version
 		}
 		return reply
-	case PutClientArgs:
+	case *rpc.PutArgs:
+		//log.Printf("put args is %v", args)
 		kv.mu.Lock()
 		defer kv.mu.Unlock()
 		valueTuple, exists := kv.KeyValueStore[args.Key]
-		var reply PutClientReply
+		var reply rpc.PutReply
 		if !exists {
 			if args.Version == 0 {
-				kv.KeyValueStore[args.Key] = ValueTuple{args.Val, args.Version}
+				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version}
 				reply.Err = rpc.OK
 			} else {
+				log.Printf("Does not exist in the map PUT and its arg version is not 0")
 				reply.Err = rpc.ErrNoKey
 			}
 		} else {
@@ -73,14 +76,14 @@ func (kv *KVServer) DoOp(req any) any {
 			if args.Version != valueTuple.Version {
 				reply.Err = rpc.ErrVersion
 			} else {
-				kv.KeyValueStore[args.Key] = ValueTuple{args.Val, args.Version + 1} //increment version number
+				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1} //increment version number
 				reply.Err = rpc.OK
 			}
 		}
 		return reply
 	default:
-		log.Printf("Unknown command %v", req)
-		log.Printf("args type is: %T", args)
+		//log.Printf("Unknown command %v", req)
+		//log.Printf("args type is: %T", args)
 		return nil
 	}
 
@@ -95,7 +98,7 @@ func (kv *KVServer) Restore(data []byte) {
 	// Your code here
 }
 
-func (kv *KVServer) Get(args *GetClientArgs, reply *GetClientReply) {
+func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a GetReply: rep.(rpc.GetReply)
@@ -106,18 +109,18 @@ func (kv *KVServer) Get(args *GetClientArgs, reply *GetClientReply) {
 		reply.Err = rpc.ErrWrongLeader
 		return
 	}
-	out := res.(GetClientReply)
+	out := res.(rpc.GetReply)
 	//now check in our localstore for the values, version and all that.
-	reply.Val = out.Val
+	reply.Value = out.Value
 	reply.Version = out.Version
 	reply.Err = out.Err
 
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-	kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
+	//kv.mu.Lock()
+	//defer kv.mu.Unlock()
+	//kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
 }
 
-func (kv *KVServer) Put(args *PutClientArgs, reply *PutClientReply) {
+func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a PutReply: rep.(rpc.PutReply)
@@ -127,11 +130,11 @@ func (kv *KVServer) Put(args *PutClientArgs, reply *PutClientReply) {
 		reply.Err = rpc.ErrWrongLeader
 		return
 	}
-	out := res.(PutClientReply)
+	out := res.(rpc.PutReply)
 	reply.Err = out.Err
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-	kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
+	//kv.mu.Lock()
+	//defer kv.mu.Unlock()
+	//kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
 
 }
 
