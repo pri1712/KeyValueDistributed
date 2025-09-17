@@ -11,7 +11,7 @@ import (
 )
 
 type KVServer struct {
-	me   int
+	me   int   //id of the server.
 	dead int32 // set by Kill()
 	rsm  *rsm.RSM
 
