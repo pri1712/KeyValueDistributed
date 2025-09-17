@@ -4,7 +4,6 @@ import (
 	"kvraft/src/kvsrv1/rpc"
 	"kvraft/src/kvtest1"
 	"kvraft/src/tester1"
-	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -21,9 +20,10 @@ type Clerk struct {
 }
 
 type GetClientArgs struct {
-	Key       string
-	ClientId  int64
-	RequestId int64
+	Key         string
+	ClientId    int64
+	RequestId   int64
+	CommandType int //0 for get 1 for put
 }
 
 type GetClientReply struct {
@@ -33,11 +33,12 @@ type GetClientReply struct {
 }
 
 type PutClientArgs struct {
-	Key       string
-	Val       string
-	Version   rpc.Tversion
-	ClientId  int64
-	RequestId int64
+	Key         string
+	Val         string
+	Version     rpc.Tversion
+	ClientId    int64
+	RequestId   int64
+	CommandType int //0 for get 1 for put
 }
 
 type PutClientReply struct {
@@ -50,7 +51,6 @@ func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 		mu:        sync.Mutex{},
 		RequestId: 0,
 		ClientId:  rand.Int63()}
-	log.Printf("client id is %d", ck.ClientId)
 	return ck
 }
 
@@ -68,15 +68,17 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 
 	// You will have to modify this function.
 	ck.mu.Lock()
-	clientId := ck.ClientId
-	requestId := ck.RequestId
+	//clientId := ck.ClientId
+	//requestId := ck.RequestId
+	//log.Printf("client id is %d", clientId)
+	//log.Printf("client requestId is %d", requestId)
 	ck.RequestId++
 	lastLeader := ck.LastLeader
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
-			request := &GetClientArgs{Key: key, ClientId: clientId, RequestId: requestId}
-			reply := &GetClientReply{}
+			request := &rpc.GetArgs{Key: key}
+			reply := &rpc.GetReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers) //first call the last leader then subsequent ones.
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Get", request, reply)
 			if !ok {
@@ -90,7 +92,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 					ck.mu.Lock()
 					ck.LastLeader = toCall
 					ck.mu.Unlock()
-					return reply.Val, reply.Version, reply.Err
+					return reply.Value, reply.Version, reply.Err
 				} else {
 					continue
 				}
@@ -120,14 +122,16 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
 	retriedPut := false
 	ck.mu.Lock()
-	clientId := ck.ClientId
-	requestId := ck.RequestId
+	//clientId := ck.ClientId
+	//requestId := ck.RequestId
+	//log.Printf("client id is %d", clientId)
+	//log.Printf("client requestId is %d", requestId)
 	ck.RequestId++
 	lastLeader := ck.LastLeader
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
-			request := &PutClientArgs{Key: key, Val: value, ClientId: clientId, RequestId: requestId, Version: version}
+			request := &rpc.PutArgs{Key: key, Value: value}
 			reply := &PutClientReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers)
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Put", request, reply)

@@ -17,9 +17,10 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-	EventId int
-	Me      int
-	Request any
+	EventId     int
+	Me          int
+	Request     any
+	RequestType int
 }
 
 // A server (i.e., ../server.go) that wants to replicate itself calls
@@ -100,11 +101,11 @@ func (rsm *RSM) channelReader() {
 				log.Println("channel reader closed")
 				return
 			}
-			log.Printf("channel reader got msg details as follows;"+
-				" msg command index : %v"+
-				" msg command valid : %v"+
-				" msg command details : %v", msg.CommandIndex, msg.CommandValid, msg.Command.(Op),
-			)
+			//log.Printf("channel reader got msg details as follows;"+
+			//	" msg command index : %v"+
+			//	" msg command valid : %v"+
+			//	" msg command details : %v", msg.CommandIndex, msg.CommandValid, msg.Command.(Op),
+			//)
 			if msg.CommandValid {
 				appliedOperation, ok := msg.Command.(Op)
 				if !ok {
@@ -112,7 +113,7 @@ func (rsm *RSM) channelReader() {
 				}
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
 				if finalResult == nil {
-					log.Printf("there was an incorrect command in doOp, please check.")
+					//log.Printf("there was an incorrect command in doOp, please check.")
 				}
 				//log.Printf("applied op eventid: %v", appliedOperation.EventId)
 				//log.Printf("msg command index: %v", msg.CommandIndex)
@@ -120,23 +121,24 @@ func (rsm *RSM) channelReader() {
 				entry, exists := rsm.pendingMap[msg.CommandIndex] //checking if it exists in the pending map.
 				rsm.mu.Unlock()
 				if !exists {
-					log.Printf("msg.commandIndex: %v", msg.CommandIndex)
-					log.Printf("cannot find the same eventId in map")
+					//log.Printf("msg.commandIndex: %v", msg.CommandIndex)
+					//log.Printf("cannot find the same eventId in map")
 					continue
 				} else {
 					ch := entry.ch
 					var out pendingResult
 					if entry.EventId != appliedOperation.EventId {
 						//different command has appeared at the index replied by start or the term has changed.
-						log.Printf("not the leader")
+						//log.Printf("not the leader")
 						out = pendingResult{Err: rpc.ErrWrongLeader, Val: nil}
 					} else {
+						//log.Printf("final result %v", finalResult)
 						out = pendingResult{Err: rpc.OK, Val: finalResult}
 					}
 					ch <- out
 					rsm.mu.Lock()
 					if cur, ok := rsm.pendingMap[msg.CommandIndex]; ok && cur == entry {
-						log.Printf("deleting %v", msg.CommandIndex)
+						//log.Printf("deleting %v", msg.CommandIndex)
 						delete(rsm.pendingMap, msg.CommandIndex)
 					}
 					rsm.mu.Unlock()
