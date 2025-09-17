@@ -12,6 +12,25 @@ type Clerk struct {
 	// You will have to modify this struct.
 }
 
+type GetClientArgs struct {
+	Key string
+}
+
+type GetClientReply struct {
+	Key     string
+	Err     rpc.Err
+	Version rpc.Tversion
+}
+
+type PutClientArgs struct {
+	Key string
+	Val string
+}
+
+type PutClientReply struct {
+	Err rpc.Err
+}
+
 func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 	ck := &Clerk{clnt: clnt, servers: servers}
 	// You'll have to add code here.
