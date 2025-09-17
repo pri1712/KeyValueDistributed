@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"kvraft/src/kvraft1/rsm"
@@ -11,11 +12,23 @@ import (
 )
 
 type KVServer struct {
-	me   int   //id of the server.
-	dead int32 // set by Kill()
-	rsm  *rsm.RSM
+	me              int   //id of the server.
+	dead            int32 // set by Kill()
+	rsm             *rsm.RSM
+	mu              sync.Mutex
+	KeyValueStore   map[string]ValueTuple
+	DuplicatedCache map[UniqueIdentifier]string // map the (clientid, requestid) to the result. so we can return from
+	// this itself.
+}
 
-	// Your definitions here.
+type UniqueIdentifier struct {
+	ClientId  int64
+	RequestId int64
+}
+
+type ValueTuple struct {
+	Val     string
+	Version rpc.Tversion
 }
 
 // To type-cast req to the right type, take a look at Go's type switches or type
@@ -41,6 +54,7 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a GetReply: rep.(rpc.GetReply)
+	// check if the key exists else return errnoKey, if it does exist then
 }
 
 func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
