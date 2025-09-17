@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var useRaftStateMachine bool // to plug in another raft besided raft1
+var useRaftStateMachine bool // to plug in another raft besides raft1
 
 type Op struct {
 	// Your definitions here.
@@ -111,6 +111,9 @@ func (rsm *RSM) channelReader() {
 					continue
 				}
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
+				if finalResult == nil {
+					log.Printf("there was an incorrect command in doOp, please check.")
+				}
 				//log.Printf("applied op eventid: %v", appliedOperation.EventId)
 				//log.Printf("msg command index: %v", msg.CommandIndex)
 				rsm.mu.Lock()
@@ -161,10 +164,10 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	rsm.mu.Unlock()
 	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
 	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
-	log.Printf("operation %v submitted", currentOp)
+	//log.Printf("operation %v submitted", currentOp)
 	rsm.mu.Lock()
 	index, _, isLeader := rsm.rf.Start(currentOp)
-	log.Printf("index where it will get inserted is: %v", index)
+	//log.Printf("index where it will get inserted is: %v", index)
 	if !isLeader {
 		//only works if the leader is not alone in a partition, if it is it wont know about new terms.
 		rsm.mu.Unlock()
