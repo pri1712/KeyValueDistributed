@@ -17,7 +17,7 @@ type KVServer struct {
 	rsm             *rsm.RSM
 	mu              sync.Mutex
 	KeyValueStore   map[string]ValueTuple
-	DuplicatedCache map[UniqueIdentifier]string // map the (clientid, requestid) to the result. so we can return from
+	DuplicatedCache map[UniqueIdentifier]any // map the (clientid, requestid) to the result. so we can return from
 	// this itself.
 }
 
@@ -50,11 +50,26 @@ func (kv *KVServer) Restore(data []byte) {
 	// Your code here
 }
 
-func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
+func (kv *KVServer) Get(args *GetClientArgs, reply *GetClientReply) {
 	// Your code here. Use kv.rsm.Submit() to submit args
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a GetReply: rep.(rpc.GetReply)
-	// check if the key exists else return errnoKey, if it does exist then
+	// first send to rsm.submit, cannot serve read directly from our local store as this could break if the current
+	//node was partitioned and had no idea about other nodes.
+	err, res := kv.rsm.Submit(args)
+	if err == rpc.ErrWrongLeader {
+		reply.Err = rpc.ErrWrongLeader
+		return
+	}
+	out := res.(*GetClientReply)
+	//now check in our localstore for the values, version and all that.
+	reply.Val = out.Val
+	reply.Version = out.Version
+	reply.Err = out.Err
+
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
 }
 
 func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
@@ -90,7 +105,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, persist
 	labgob.Register(rpc.PutArgs{})
 	labgob.Register(rpc.GetArgs{})
 
-	kv := &KVServer{me: me}
+	kv := &KVServer{me: me,
+		KeyValueStore:   make(map[string]ValueTuple),
+		DuplicatedCache: make(map[UniqueIdentifier]any)}
 
 	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
 	// You may need initialization code here.
