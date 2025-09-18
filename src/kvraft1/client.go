@@ -42,11 +42,11 @@ func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 
 	// You will have to modify this function.
-	ck.mu.Lock()
 	//clientId := ck.ClientId
 	//requestId := ck.RequestId
 	//log.Printf("client id is %d", clientId)
 	//log.Printf("client requestId is %d", requestId)
+	ck.mu.Lock()
 	ck.RequestId++
 	lastLeader := ck.LastLeader
 	ck.mu.Unlock()
@@ -62,13 +62,14 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 			} else {
 				if reply.Err == rpc.ErrNoKey {
 					// if err no key return, otherwise keep retrying.
+					log.Printf("rpc error no key in GET for key %v", key)
 					return "", reply.Version, reply.Err
 				}
 				if reply.Err == rpc.OK {
 					ck.mu.Lock()
 					ck.LastLeader = toCall
 					ck.mu.Unlock()
-					log.Printf("get returned ok")
+					log.Printf("GET returned ok with reply value,version and error %v,%v,%v", reply.Value, reply.Version, reply.Err)
 					return reply.Value, reply.Version, reply.Err
 				} else {
 					continue
@@ -98,11 +99,11 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
 	retriedPut := false
-	ck.mu.Lock()
 	//clientId := ck.ClientId
 	//requestId := ck.RequestId
 	//log.Printf("client id is %d", clientId)
 	//log.Printf("client requestId is %d", requestId)
+	ck.mu.Lock()
 	ck.RequestId++
 	lastLeader := ck.LastLeader
 	ck.mu.Unlock()
@@ -123,18 +124,21 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 					ck.mu.Lock()
 					ck.LastLeader = toCall
 					ck.mu.Unlock()
-					log.Printf("put returned ok")
+					log.Printf("PUT returned ok")
 					return rpc.OK
 				case rpc.ErrNoKey:
+					log.Printf("rpc error no key in PUT for key %v", key)
 					return rpc.ErrNoKey
 				case rpc.ErrVersion:
 					if retriedPut == false {
 						return rpc.ErrVersion
 					} else {
 						//if this is on a retry, it may have been put into the kv store.
+						log.Printf("returning rpc maybe because already had tried.")
 						return rpc.ErrMaybe
 					}
 				case rpc.ErrWrongLeader:
+					log.Printf("retrying PUT  because we have wrong leader")
 					retriedPut = true
 					continue
 				}
