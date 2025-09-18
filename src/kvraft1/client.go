@@ -4,6 +4,7 @@ import (
 	"kvraft/src/kvsrv1/rpc"
 	"kvraft/src/kvtest1"
 	"kvraft/src/tester1"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -17,32 +18,6 @@ type Clerk struct {
 	ClientId   int64 //to uniquely identify each client at the server.
 	LastLeader int
 	// You will have to modify this struct.
-}
-
-type GetClientArgs struct {
-	Key         string
-	ClientId    int64
-	RequestId   int64
-	CommandType int //0 for get 1 for put
-}
-
-type GetClientReply struct {
-	Val     string
-	Err     rpc.Err
-	Version rpc.Tversion
-}
-
-type PutClientArgs struct {
-	Key         string
-	Val         string
-	Version     rpc.Tversion
-	ClientId    int64
-	RequestId   int64
-	CommandType int //0 for get 1 for put
-}
-
-type PutClientReply struct {
-	Err rpc.Err
 }
 
 func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
@@ -67,31 +42,34 @@ func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 
 	// You will have to modify this function.
-	ck.mu.Lock()
 	//clientId := ck.ClientId
 	//requestId := ck.RequestId
 	//log.Printf("client id is %d", clientId)
 	//log.Printf("client requestId is %d", requestId)
+	ck.mu.Lock()
 	ck.RequestId++
 	lastLeader := ck.LastLeader
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
+			log.Printf("key to get is %v", key)
 			request := &rpc.GetArgs{Key: key}
 			reply := &rpc.GetReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers) //first call the last leader then subsequent ones.
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Get", request, reply)
 			if !ok {
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			} else {
 				if reply.Err == rpc.ErrNoKey {
 					// if err no key return, otherwise keep retrying.
+					log.Printf("rpc error no key in GET for key %v", key)
 					return "", reply.Version, reply.Err
 				}
 				if reply.Err == rpc.OK {
 					ck.mu.Lock()
 					ck.LastLeader = toCall
 					ck.mu.Unlock()
+					log.Printf("GET returned ok with reply value,version and error %v,%v,%v", reply.Value, reply.Version, reply.Err)
 					return reply.Value, reply.Version, reply.Err
 				} else {
 					continue
@@ -121,23 +99,24 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
 	retriedPut := false
-	ck.mu.Lock()
 	//clientId := ck.ClientId
 	//requestId := ck.RequestId
 	//log.Printf("client id is %d", clientId)
 	//log.Printf("client requestId is %d", requestId)
+	ck.mu.Lock()
 	ck.RequestId++
 	lastLeader := ck.LastLeader
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
-			request := &rpc.PutArgs{Key: key, Value: value}
-			reply := &PutClientReply{}
+			log.Printf("key to put is %v,%v", key, value)
+			request := &rpc.PutArgs{Key: key, Value: value, Version: version}
+			reply := &rpc.PutReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers)
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Put", request, reply)
 			if !ok {
 				retriedPut = true
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			} else {
 				//case based on err reply.
 				switch reply.Err {
@@ -145,17 +124,21 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 					ck.mu.Lock()
 					ck.LastLeader = toCall
 					ck.mu.Unlock()
+					log.Printf("PUT returned ok")
 					return rpc.OK
 				case rpc.ErrNoKey:
+					log.Printf("rpc error no key in PUT for key %v", key)
 					return rpc.ErrNoKey
 				case rpc.ErrVersion:
 					if retriedPut == false {
 						return rpc.ErrVersion
 					} else {
 						//if this is on a retry, it may have been put into the kv store.
+						log.Printf("returning rpc maybe because already had tried.")
 						return rpc.ErrMaybe
 					}
 				case rpc.ErrWrongLeader:
+					log.Printf("retrying PUT  because we have wrong leader")
 					retriedPut = true
 					continue
 				}

@@ -54,7 +54,9 @@ func (kv *KVServer) DoOp(req any) any {
 		} else {
 			reply.Err = rpc.OK
 			reply.Value = valueTuple.Val
+			//log.Printf("reply value is :%v", reply.Value)
 			reply.Version = valueTuple.Version
+			//log.Printf("reply details are :%v,%v,%v", reply.Value, reply.Version, reply.Err)
 		}
 		return reply
 	case *rpc.PutArgs:
@@ -65,8 +67,9 @@ func (kv *KVServer) DoOp(req any) any {
 		var reply rpc.PutReply
 		if !exists {
 			if args.Version == 0 {
-				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version}
+				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1}
 				reply.Err = rpc.OK
+				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
 			} else {
 				log.Printf("Does not exist in the map PUT and its arg version is not 0")
 				reply.Err = rpc.ErrNoKey
@@ -77,7 +80,9 @@ func (kv *KVServer) DoOp(req any) any {
 				reply.Err = rpc.ErrVersion
 			} else {
 				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1} //increment version number
+				log.Printf("new version is %d", args.Version+1)
 				reply.Err = rpc.OK
+				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
 			}
 		}
 		return reply
@@ -114,7 +119,7 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	reply.Value = out.Value
 	reply.Version = out.Version
 	reply.Err = out.Err
-
+	//log.Printf("GET reply is %v,%v,%v", reply.Value, reply.Version, reply.Err)
 	//kv.mu.Lock()
 	//defer kv.mu.Unlock()
 	//kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
@@ -132,6 +137,7 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	}
 	out := res.(rpc.PutReply)
 	reply.Err = out.Err
+	//log.Printf("PUT reply is %v", reply)
 	//kv.mu.Lock()
 	//defer kv.mu.Unlock()
 	//kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
@@ -164,10 +170,6 @@ func StartKVServer(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, persist
 	labgob.Register(rsm.Op{})
 	labgob.Register(rpc.PutArgs{})
 	labgob.Register(rpc.GetArgs{})
-	labgob.Register(GetClientArgs{})
-	labgob.Register(PutClientArgs{})
-	labgob.Register(GetClientReply{})
-	labgob.Register(PutClientReply{})
 	kv := &KVServer{me: me,
 		KeyValueStore:   make(map[string]ValueTuple),
 		DuplicatedCache: make(map[UniqueIdentifier]any)}

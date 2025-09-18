@@ -112,6 +112,7 @@ func (rsm *RSM) channelReader() {
 					continue
 				}
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
+				log.Printf("final result: %v", finalResult)
 				if finalResult == nil {
 					//log.Printf("there was an incorrect command in doOp, please check.")
 				}
@@ -181,6 +182,7 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 
 	select {
 	case res := <-pending.ch:
+		log.Printf("sending back res : %v", res)
 		return res.Err, res.Val
 	case <-time.After(2 * time.Second):
 		rsm.mu.Lock()
