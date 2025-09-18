@@ -4,6 +4,7 @@ import (
 	"kvraft/src/kvsrv1/rpc"
 	"kvraft/src/kvtest1"
 	"kvraft/src/tester1"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -92,6 +93,7 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 					ck.mu.Lock()
 					ck.LastLeader = toCall
 					ck.mu.Unlock()
+					log.Printf("get returned ok")
 					return reply.Value, reply.Version, reply.Err
 				} else {
 					continue
@@ -145,6 +147,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 					ck.mu.Lock()
 					ck.LastLeader = toCall
 					ck.mu.Unlock()
+					log.Printf("put returned ok")
 					return rpc.OK
 				case rpc.ErrNoKey:
 					return rpc.ErrNoKey

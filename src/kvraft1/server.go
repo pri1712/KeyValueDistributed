@@ -45,8 +45,8 @@ func (kv *KVServer) DoOp(req any) any {
 	case *rpc.GetArgs:
 		//log.Printf("get args is %v", args)
 		kv.mu.Lock()
-		defer kv.mu.Unlock()
 		valueTuple, exists := kv.KeyValueStore[args.Key]
+		kv.mu.Unlock()
 		var reply rpc.GetReply
 		if !exists {
 			log.Printf("Does not exist in the map GET")
@@ -60,8 +60,8 @@ func (kv *KVServer) DoOp(req any) any {
 	case *rpc.PutArgs:
 		//log.Printf("put args is %v", args)
 		kv.mu.Lock()
-		defer kv.mu.Unlock()
 		valueTuple, exists := kv.KeyValueStore[args.Key]
+		kv.mu.Unlock()
 		var reply rpc.PutReply
 		if !exists {
 			if args.Version == 0 {
@@ -114,7 +114,7 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	reply.Value = out.Value
 	reply.Version = out.Version
 	reply.Err = out.Err
-
+	log.Printf("GET reply is %v,%v,%v", reply.Value, reply.Version, reply.Err)
 	//kv.mu.Lock()
 	//defer kv.mu.Unlock()
 	//kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
@@ -132,6 +132,7 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	}
 	out := res.(rpc.PutReply)
 	reply.Err = out.Err
+	log.Printf("PUT reply is %v", reply)
 	//kv.mu.Lock()
 	//defer kv.mu.Unlock()
 	//kv.DuplicatedCache[UniqueIdentifier{ClientId: args.ClientId, RequestId: args.RequestId}] = out
