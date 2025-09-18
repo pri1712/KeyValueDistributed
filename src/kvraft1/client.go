@@ -20,32 +20,6 @@ type Clerk struct {
 	// You will have to modify this struct.
 }
 
-type GetClientArgs struct {
-	Key         string
-	ClientId    int64
-	RequestId   int64
-	CommandType int //0 for get 1 for put
-}
-
-type GetClientReply struct {
-	Val     string
-	Err     rpc.Err
-	Version rpc.Tversion
-}
-
-type PutClientArgs struct {
-	Key         string
-	Val         string
-	Version     rpc.Tversion
-	ClientId    int64
-	RequestId   int64
-	CommandType int //0 for get 1 for put
-}
-
-type PutClientReply struct {
-	Err rpc.Err
-}
-
 func MakeClerk(clnt *tester.Clnt, servers []string) kvtest.IKVClerk {
 	ck := &Clerk{Clnt: clnt,
 		Servers:   servers,
@@ -78,12 +52,13 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
+			log.Printf("key to get is %v", key)
 			request := &rpc.GetArgs{Key: key}
 			reply := &rpc.GetReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers) //first call the last leader then subsequent ones.
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Get", request, reply)
 			if !ok {
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			} else {
 				if reply.Err == rpc.ErrNoKey {
 					// if err no key return, otherwise keep retrying.
@@ -133,13 +108,14 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	ck.mu.Unlock()
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
+			log.Printf("key to put is %v,%v", key, value)
 			request := &rpc.PutArgs{Key: key, Value: value}
-			reply := &PutClientReply{}
+			reply := &rpc.PutReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers)
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Put", request, reply)
 			if !ok {
 				retriedPut = true
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			} else {
 				//case based on err reply.
 				switch reply.Err {
