@@ -110,7 +110,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 	for {
 		for serverIndex := 0; serverIndex < len(ck.Servers); serverIndex++ {
 			log.Printf("key to put is %v,%v", key, value)
-			request := &rpc.PutArgs{Key: key, Value: value}
+			request := &rpc.PutArgs{Key: key, Value: value, Version: version}
 			reply := &rpc.PutReply{}
 			toCall := (serverIndex + lastLeader) % len(ck.Servers)
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Put", request, reply)

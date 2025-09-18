@@ -67,7 +67,7 @@ func (kv *KVServer) DoOp(req any) any {
 		var reply rpc.PutReply
 		if !exists {
 			if args.Version == 0 {
-				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version}
+				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1}
 				reply.Err = rpc.OK
 				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
 			} else {
@@ -80,6 +80,7 @@ func (kv *KVServer) DoOp(req any) any {
 				reply.Err = rpc.ErrVersion
 			} else {
 				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1} //increment version number
+				log.Printf("new version is %d", args.Version+1)
 				reply.Err = rpc.OK
 				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
 			}
