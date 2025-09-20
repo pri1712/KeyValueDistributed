@@ -3,6 +3,8 @@ package kvtest
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+
 	//"log"
 	"math/rand"
 	"strconv"
@@ -84,6 +86,7 @@ func (ts *Test) PutAtLeastOnce(ck IKVClerk, key, value string, ver rpc.Tversion,
 		err := ts.Put(ck, key, value, ver, me)
 		if err == rpc.OK {
 			ver += 1
+			log.Printf("ver: %v", ver)
 			break
 		}
 		if err == rpc.ErrMaybe || err == rpc.ErrVersion {
@@ -103,6 +106,7 @@ func (ts *Test) PutAtLeastOnce(ck IKVClerk, key, value string, ver rpc.Tversion,
 
 func (ts *Test) CheckGet(ck IKVClerk, key, value string, version rpc.Tversion) {
 	tester.AnnotateCheckerBegin(fmt.Sprintf("checking Get(%v) = (%v, %v)", key, value, version))
+	log.Printf("checking Get(%v) = (%v, %v)", key, value, version)
 	val, ver, err := ts.Get(ck, key, 0)
 	if err != rpc.OK {
 		text := fmt.Sprintf("Get(%v) returns error = %v", key, err)

@@ -112,6 +112,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 			log.Printf("key to put is %v,%v", key, value)
 			request := &rpc.PutArgs{Key: key, Value: value, Version: version}
 			reply := &rpc.PutReply{}
+			log.Printf("request is %v", request)
 			toCall := (serverIndex + lastLeader) % len(ck.Servers)
 			ok := ck.Clnt.Call(ck.Servers[toCall], "KVServer.Put", request, reply)
 			if !ok {
@@ -139,7 +140,7 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 					}
 				case rpc.ErrWrongLeader:
 					log.Printf("retrying PUT  because we have wrong leader")
-					retriedPut = true
+					//retriedPut = true
 					continue
 				}
 			}
