@@ -2,6 +2,8 @@ package kvraft
 
 import (
 	"fmt"
+	"log"
+
 	//"log"
 	"strconv"
 	"testing"
@@ -210,13 +212,13 @@ func TestOnePartition4B(t *testing.T) {
 	p1, p2 := ts.Group(Gid).MakePartition(l)
 	ts.Group(Gid).Partition(p1, p2)
 	tester.AnnotateTwoPartitions(p1, p2)
-
+	log.Printf("made partitions")
 	ckp1 := ts.MakeClerkTo(p1)  // connect ckp1 to p1
 	ckp2a := ts.MakeClerkTo(p2) // connect ckp2a to p2
 	ckp2b := ts.MakeClerkTo(p2) // connect ckp2b to p2
 
 	ver1 := ts.PutAtLeastOnce(ckp1, "1", "14", ver0, -1)
-	ts.CheckGet(ckp1, "1", "14", ver1)
+	ts.CheckGet(ckp1, "1", "14", ver1) //doesnt reach here.
 
 	ts.End()
 

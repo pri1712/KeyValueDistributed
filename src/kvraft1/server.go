@@ -63,15 +63,16 @@ func (kv *KVServer) DoOp(req any) any {
 		//log.Printf("put args is %v", args)
 		kv.mu.Lock()
 		defer kv.mu.Unlock()
+		//log.Printf("PutArgs key: %v", args.Key)
 		valueTuple, exists := kv.KeyValueStore[args.Key]
 		var reply rpc.PutReply
 		if !exists {
 			if args.Version == 0 {
-				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1}
+				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, 1}
 				reply.Err = rpc.OK
 				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
 			} else {
-				log.Printf("Does not exist in the map PUT and its arg version is not 0")
+				log.Printf("(PUT)Does not exist in the kv store and its arg version is not 0")
 				reply.Err = rpc.ErrNoKey
 			}
 		} else {
@@ -84,6 +85,10 @@ func (kv *KVServer) DoOp(req any) any {
 				reply.Err = rpc.OK
 				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
 			}
+		}
+		log.Printf("-------KV Store for server %v-------", kv.me)
+		for key, value := range kv.KeyValueStore {
+			log.Printf("key: %v, value: %v", key, value)
 		}
 		return reply
 	default:
