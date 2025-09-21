@@ -44,61 +44,72 @@ func (kv *KVServer) DoOp(req any) any {
 	switch args := req.(type) {
 	case *rpc.GetArgs:
 		//log.Printf("get args is %v", args)
-		kv.mu.Lock()
-		defer kv.mu.Unlock()
-		valueTuple, exists := kv.KeyValueStore[args.Key]
-		var reply rpc.GetReply
-		if !exists {
-			log.Printf("Does not exist in the map GET")
-			reply.Err = rpc.ErrNoKey
-		} else {
-			reply.Err = rpc.OK
-			reply.Value = valueTuple.Val
-			//log.Printf("reply value is :%v", reply.Value)
-			reply.Version = valueTuple.Version
-			//log.Printf("reply details are :%v,%v,%v", reply.Value, reply.Version, reply.Err)
-		}
-		return reply
+		return kv.HandleGet(args)
+	case rpc.GetArgs:
+		return kv.HandleGet(&args)
 	case *rpc.PutArgs:
 		//log.Printf("put args is %v", args)
-		kv.mu.Lock()
-		defer kv.mu.Unlock()
-		//log.Printf("PutArgs key: %v", args.Key)
-		valueTuple, exists := kv.KeyValueStore[args.Key]
-		var reply rpc.PutReply
-		if !exists {
-			if args.Version == 0 {
-				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, 1}
-				reply.Err = rpc.OK
-				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
-			} else {
-				log.Printf("(PUT)Does not exist in the kv store and its arg version is not 0")
-				reply.Err = rpc.ErrNoKey
-			}
-		} else {
-			//check for version mismatch.
-			if args.Version != valueTuple.Version {
-				reply.Err = rpc.ErrVersion
-			} else {
-				kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1} //increment version number
-				log.Printf("new version is %d", args.Version+1)
-				reply.Err = rpc.OK
-				//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
-			}
-		}
-		log.Printf("-------KV Store for server %v-------", kv.me)
-		for key, value := range kv.KeyValueStore {
-			log.Printf("key: %v, value: %v", key, value)
-		}
-		return reply
+		return kv.HandlePut(args)
+	case rpc.PutArgs:
+		return kv.HandlePut(&args)
 	default:
 		//log.Printf("Unknown command %v", req)
-		//log.Printf("args type is: %T", args)
+		log.Printf("args type is: %T", args)
 		return nil
 	}
 
 }
 
+func (kv *KVServer) HandlePut(args *rpc.PutArgs) rpc.PutReply {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	//log.Printf("PutArgs key: %v", args.Key)
+	valueTuple, exists := kv.KeyValueStore[args.Key]
+	var reply rpc.PutReply
+	if !exists {
+		if args.Version == 0 {
+			kv.KeyValueStore[args.Key] = ValueTuple{args.Value, 1}
+			reply.Err = rpc.OK
+			//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
+		} else {
+			log.Printf("(PUT)Does not exist in the kv store and its arg version is not 0")
+			reply.Err = rpc.ErrNoKey
+		}
+	} else {
+		//check for version mismatch.
+		if args.Version != valueTuple.Version {
+			reply.Err = rpc.ErrVersion
+		} else {
+			kv.KeyValueStore[args.Key] = ValueTuple{args.Value, args.Version + 1} //increment version number
+			log.Printf("new version is %d", args.Version+1)
+			reply.Err = rpc.OK
+			//log.Printf("stored value is: %v", kv.KeyValueStore[args.Key])
+		}
+	}
+	log.Printf("-------KV Store for server %v-------", kv.me)
+	for key, value := range kv.KeyValueStore {
+		log.Printf("key: %v, value: %v", key, value)
+	}
+	return reply
+}
+
+func (kv *KVServer) HandleGet(args *rpc.GetArgs) rpc.GetReply {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	valueTuple, exists := kv.KeyValueStore[args.Key]
+	var reply rpc.GetReply
+	if !exists {
+		log.Printf("Does not exist in the map GET")
+		reply.Err = rpc.ErrNoKey
+	} else {
+		reply.Err = rpc.OK
+		reply.Value = valueTuple.Val
+		//log.Printf("reply value is :%v", reply.Value)
+		reply.Version = valueTuple.Version
+		//log.Printf("reply details are :%v,%v,%v", reply.Value, reply.Version, reply.Err)
+	}
+	return reply
+}
 func (kv *KVServer) Snapshot() []byte {
 	// Your code here
 	return nil
@@ -135,11 +146,13 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	// You can use go's type casts to turn the any return value
 	// of Submit() into a PutReply: rep.(rpc.PutReply)
 	//first gotta check what the majority consensus is, only then can we return or modify values.
+	log.Printf("Put args %v", args)
 	err, res := kv.rsm.Submit(args)
 	if err == rpc.ErrWrongLeader {
 		reply.Err = rpc.ErrWrongLeader
 		return
 	}
+	log.Printf("type of res %T", res)
 	out := res.(rpc.PutReply)
 	reply.Err = out.Err
 	//log.Printf("PUT reply is %v", reply)

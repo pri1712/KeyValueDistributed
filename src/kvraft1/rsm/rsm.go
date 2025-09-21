@@ -14,9 +14,6 @@ import (
 var useRaftStateMachine bool // to plug in another raft besides raft1
 
 type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
 	EventId     int
 	Me          int
 	Request     any
@@ -37,7 +34,7 @@ type StateMachine interface {
 
 type pendingEntry struct {
 	EventId int
-	ch      chan pendingResult
+	Ch      chan pendingResult
 }
 
 type pendingResult struct {
@@ -112,6 +109,7 @@ func (rsm *RSM) channelReader() {
 					continue
 				}
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
+				//log.Printf("command is %v", msg.Command)
 				log.Printf("final result: %v", finalResult)
 				if finalResult == nil {
 					//log.Printf("there was an incorrect command in doOp, please check.")
@@ -126,7 +124,7 @@ func (rsm *RSM) channelReader() {
 					//log.Printf("cannot find the same eventId in map")
 					continue
 				} else {
-					ch := entry.ch
+					ch := entry.Ch
 					var out pendingResult
 					if entry.EventId != appliedOperation.EventId {
 						//different command has appeared at the index replied by start or the term has changed.
@@ -165,8 +163,9 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	eventId := rsm.currenteventId
 	rsm.currenteventId++
 	rsm.mu.Unlock()
+	log.Printf("request is %v", req)
 	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
-	pending := pendingEntry{EventId: eventId, ch: make(chan pendingResult, 1)}
+	pending := pendingEntry{EventId: eventId, Ch: make(chan pendingResult, 1)}
 	//log.Printf("operation %v submitted", currentOp)
 	rsm.mu.Lock()
 	index, _, isLeader := rsm.rf.Start(currentOp)
@@ -181,7 +180,7 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	rsm.mu.Unlock()
 
 	select {
-	case res := <-pending.ch:
+	case res := <-pending.Ch:
 		log.Printf("sending back res : %v", res)
 		return res.Err, res.Val
 	case <-time.After(2 * time.Second):
