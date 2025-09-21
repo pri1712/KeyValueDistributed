@@ -1006,7 +1006,8 @@ func (rf *Raft) applier() {
 			//log.Printf("here in applier")
 			cmd := rf.EventLogs[newidx].Command
 			//log.Printf("logs for server %d are %v", rf.me, rf.EventLogs)
-			msg := raftapi.ApplyMsg{CommandValid: true, Command: cmd, CommandIndex: idx}
+			msg := raftapi.ApplyMsg{CommandValid: true, Command: cmd, CommandIndex: idx, SnapshotValid: false,
+				SnapshotTerm: rf.LastIncludedTerm, SnapshotIndex: rf.LastIncludedIndex}
 			log.Printf("apply command on server %v : %v", rf.me, cmd)
 			rf.mu.Unlock()
 			rf.ApplicationChanel <- msg

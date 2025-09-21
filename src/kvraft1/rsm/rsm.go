@@ -43,14 +43,18 @@ type pendingResult struct {
 }
 
 type RSM struct {
-	mu             sync.Mutex
-	me             int
-	rf             raftapi.Raft
-	applyCh        chan raftapi.ApplyMsg
-	maxraftstate   int // snapshot if log grows this big
-	sm             StateMachine
-	currenteventId int
-	pendingMap     map[int]*pendingEntry
+	mu                sync.Mutex
+	me                int
+	rf                raftapi.Raft
+	applyCh           chan raftapi.ApplyMsg
+	maxraftstate      int // snapshot if log grows this big
+	sm                StateMachine
+	currenteventId    int
+	pendingMap        map[int]*pendingEntry
+	lastSnapshotIndex int
+	lastSnapshotTerm  int
+	lastSnapshot      []byte
+	persister         *tester.Persister
 	// Your definitions here.
 }
 
@@ -71,11 +75,15 @@ type RSM struct {
 // any long-running work.
 func MakeRSM(servers []*labrpc.ClientEnd, me int, persister *tester.Persister, maxraftstate int, sm StateMachine) *RSM {
 	rsm := &RSM{
-		me:           me,
-		maxraftstate: maxraftstate,
-		applyCh:      make(chan raftapi.ApplyMsg),
-		sm:           sm,
-		pendingMap:   make(map[int]*pendingEntry),
+		me:                me,
+		maxraftstate:      maxraftstate,
+		applyCh:           make(chan raftapi.ApplyMsg),
+		sm:                sm,
+		pendingMap:        make(map[int]*pendingEntry),
+		lastSnapshotIndex: 0,
+		lastSnapshotTerm:  0,
+		lastSnapshot:      nil,
+		persister:         persister,
 	}
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
@@ -110,9 +118,18 @@ func (rsm *RSM) channelReader() {
 				}
 				finalResult := rsm.sm.DoOp(appliedOperation.Request)
 				//log.Printf("command is %v", msg.Command)
+				//snapshot details capture.
 				log.Printf("final result: %v", finalResult)
 				if finalResult == nil {
 					//log.Printf("there was an incorrect command in doOp, please check.")
+				}
+				rsm.mu.Lock()
+				rsm.lastSnapshotIndex = msg.CommandIndex
+				rsm.lastSnapshotTerm = msg.SnapshotTerm
+				rsm.mu.Unlock()
+				if rsm.maxraftstate >= 0 && rsm.maxraftstate <= rsm.rf.PersistBytes() {
+					snapshot := rsm.sm.Snapshot()
+					rsm.rf.Snapshot(msg.CommandIndex, snapshot)
 				}
 				//log.Printf("applied op eventid: %v", appliedOperation.EventId)
 				//log.Printf("msg command index: %v", msg.CommandIndex)
@@ -163,18 +180,23 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	eventId := rsm.currenteventId
 	rsm.currenteventId++
 	rsm.mu.Unlock()
+	restoredSnapshot := rsm.persister.ReadSnapshot()
+	if restoredSnapshot != nil && len(restoredSnapshot) > 0 {
+		log.Printf("restored snapshot: %v", restoredSnapshot)
+		rsm.sm.Restore(restoredSnapshot)
+		rsm.lastSnapshot = restoredSnapshot
+	}
 	log.Printf("request is %v", req)
 	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
 	pending := pendingEntry{EventId: eventId, Ch: make(chan pendingResult, 1)}
 	//log.Printf("operation %v submitted", currentOp)
-	rsm.mu.Lock()
 	index, _, isLeader := rsm.rf.Start(currentOp)
 	//log.Printf("index where it will get inserted is: %v", index)
 	if !isLeader {
 		//only works if the leader is not alone in a partition, if it is it wont know about new terms.
-		rsm.mu.Unlock()
 		return rpc.ErrWrongLeader, nil
 	}
+	rsm.mu.Lock()
 	rsm.pendingMap[index] = &pending //mapping index to eventID. so we can check if the same eventId got inserted at
 	//that index.
 	rsm.mu.Unlock()
@@ -183,16 +205,11 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	case res := <-pending.Ch:
 		log.Printf("sending back res : %v", res)
 		return res.Err, res.Val
-	case <-time.After(2 * time.Second):
+	case <-time.After(5 * time.Second):
 		rsm.mu.Lock()
 		delete(rsm.pendingMap, index)
 		rsm.mu.Unlock()
 		return rpc.ErrWrongLeader, nil
 	}
-	//case <-time.After(time.Second):
-	//	rsm.mu.Lock()
-	//	delete(rsm.pendingMap, index)
-	//	rsm.mu.Unlock()
-	//	//log.Printf("in case 2")
 
 }
