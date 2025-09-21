@@ -140,7 +140,8 @@ func (ck *Clerk) Put(key string, value string, version rpc.Tversion) rpc.Err {
 					}
 				case rpc.ErrWrongLeader:
 					log.Printf("retrying PUT  because we have wrong leader")
-					//retriedPut = true
+					retriedPut = true
+					time.Sleep(50 * time.Millisecond)
 					continue
 				}
 			}
