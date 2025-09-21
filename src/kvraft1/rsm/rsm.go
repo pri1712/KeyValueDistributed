@@ -160,7 +160,18 @@ func (rsm *RSM) channelReader() {
 					rsm.mu.Unlock()
 				}
 			} else if msg.SnapshotValid {
-				log.Printf("Snapshot is valid")
+				rsm.mu.Lock()
+				rsm.sm.Restore(msg.Snapshot)
+				rsm.lastSnapshot = msg.Snapshot
+				rsm.lastSnapshotIndex = msg.SnapshotIndex
+				rsm.lastSnapshotTerm = msg.SnapshotTerm
+				for idx, entry := range rsm.pendingMap {
+					if idx <= msg.SnapshotIndex {
+						entry.Ch <- pendingResult{Err: rpc.ErrWrongLeader, Val: nil}
+						delete(rsm.pendingMap, idx)
+					}
+				}
+				rsm.mu.Unlock()
 				continue
 			}
 		}
@@ -180,12 +191,12 @@ func (rsm *RSM) Submit(req any) (rpc.Err, any) {
 	eventId := rsm.currenteventId
 	rsm.currenteventId++
 	rsm.mu.Unlock()
-	restoredSnapshot := rsm.persister.ReadSnapshot()
-	if restoredSnapshot != nil && len(restoredSnapshot) > 0 {
-		log.Printf("restored snapshot: %v", restoredSnapshot)
-		rsm.sm.Restore(restoredSnapshot)
-		rsm.lastSnapshot = restoredSnapshot
-	}
+	//restoredSnapshot := rsm.persister.ReadSnapshot()
+	//if restoredSnapshot != nil && len(restoredSnapshot) > 0 {
+	//	log.Printf("restored snapshot: %v", restoredSnapshot)
+	//	rsm.sm.Restore(restoredSnapshot)
+	//	rsm.lastSnapshot = restoredSnapshot
+	//}
 	log.Printf("request is %v", req)
 	currentOp := Op{EventId: eventId, Me: rsm.me, Request: req}
 	pending := pendingEntry{EventId: eventId, Ch: make(chan pendingResult, 1)}
