@@ -227,7 +227,7 @@ func (rf *Raft) readPersist(data []byte) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	log.Println("readPersist")
-	if data == nil || len(data) < 1 { // bootstrap without any ServerState?
+	if data == nil || len(data) < 1 {
 		log.Println("readPersist empty data")
 		return
 	}

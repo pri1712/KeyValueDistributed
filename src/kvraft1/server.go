@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"bytes"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -111,13 +112,32 @@ func (kv *KVServer) HandleGet(args *rpc.GetArgs) rpc.GetReply {
 func (kv *KVServer) Snapshot() []byte {
 	// Your code here
 	//convert kvserver data to byte array.
-
-	return nil
+	writeBuffer := new(bytes.Buffer)
+	encoder := labgob.NewEncoder(writeBuffer)
+	err := encoder.Encode(kv.KeyValueStore)
+	if err != nil {
+		return nil
+	}
+	return writeBuffer.Bytes()
 }
 
 func (kv *KVServer) Restore(data []byte) {
 	// Your code here
-
+	//restore the kv from the snapshot.
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	if data == nil || len(data) < 1 {
+		log.Println("snapshot empty data")
+		return
+	}
+	readBuffer := bytes.NewBuffer(data)
+	decoder := labgob.NewDecoder(readBuffer)
+	var KeyValueStore map[string]ValueTuple
+	if decoder.Decode(&KeyValueStore) != nil {
+		log.Printf("Restore fail")
+	} else {
+		kv.KeyValueStore = KeyValueStore
+	}
 }
 
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
