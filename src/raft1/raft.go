@@ -227,7 +227,7 @@ func (rf *Raft) readPersist(data []byte) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	log.Println("readPersist")
-	if data == nil || len(data) < 1 { // bootstrap without any ServerState?
+	if data == nil || len(data) < 1 {
 		log.Println("readPersist empty data")
 		return
 	}
@@ -329,6 +329,7 @@ func (rf *Raft) killed() bool {
 }
 
 // InstallSnapshot this is on the receiving end of the installsnapshot RPC, have to handle edge cases and trim logs.
+// send the applicn the snapshot so that it can revive its state.
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
 	//log.Println("InstallSnapshot called")
 
@@ -339,12 +340,10 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		return
 	}
 	reply.Term = rf.CurrentTerm
-
 	//reject if older term.
 	if args.Term < rf.CurrentTerm {
 		return
 	}
-
 	//update the current term if newer term found
 	if args.Term > rf.CurrentTerm {
 		rf.CurrentTerm = args.Term
@@ -352,12 +351,10 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		rf.ServerState = Follower
 		rf.VoteCount = 0
 	}
-
 	//if already snapshotted, reject.
 	if args.LastIncludedIndex <= rf.LastIncludedIndex {
 		return
 	}
-
 	oldEventLogs := rf.EventLogs
 	oldLastIncludedIndex := rf.LastIncludedIndex
 	// relative index of snapshot boundary in old logs

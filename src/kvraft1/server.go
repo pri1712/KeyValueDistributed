@@ -1,6 +1,7 @@
 package kvraft
 
 import (
+	"bytes"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -13,13 +14,11 @@ import (
 )
 
 type KVServer struct {
-	me              int   //id of the server.
-	dead            int32 // set by Kill()
-	rsm             *rsm.RSM
-	mu              sync.Mutex
-	KeyValueStore   map[string]ValueTuple
-	DuplicatedCache map[UniqueIdentifier]any // map the (clientid, requestid) to the result. so we can return from
-	// this itself.
+	me            int   //id of the server.
+	dead          int32 // set by Kill()
+	rsm           *rsm.RSM
+	mu            sync.Mutex
+	KeyValueStore map[string]ValueTuple
 }
 
 type UniqueIdentifier struct {
@@ -112,11 +111,33 @@ func (kv *KVServer) HandleGet(args *rpc.GetArgs) rpc.GetReply {
 }
 func (kv *KVServer) Snapshot() []byte {
 	// Your code here
-	return nil
+	//convert kvserver data to byte array.
+	writeBuffer := new(bytes.Buffer)
+	encoder := labgob.NewEncoder(writeBuffer)
+	err := encoder.Encode(kv.KeyValueStore)
+	if err != nil {
+		return nil
+	}
+	return writeBuffer.Bytes()
 }
 
 func (kv *KVServer) Restore(data []byte) {
 	// Your code here
+	//restore the kv from the snapshot.
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	if data == nil || len(data) < 1 {
+		log.Println("snapshot empty data")
+		return
+	}
+	readBuffer := bytes.NewBuffer(data)
+	decoder := labgob.NewDecoder(readBuffer)
+	var KeyValueStore map[string]ValueTuple
+	if decoder.Decode(&KeyValueStore) != nil {
+		log.Printf("Restore fail")
+	} else {
+		kv.KeyValueStore = KeyValueStore
+	}
 }
 
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
@@ -189,8 +210,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, gid tester.Tgid, me int, persist
 	labgob.Register(rpc.PutArgs{})
 	labgob.Register(rpc.GetArgs{})
 	kv := &KVServer{me: me,
-		KeyValueStore:   make(map[string]ValueTuple),
-		DuplicatedCache: make(map[UniqueIdentifier]any)}
+		KeyValueStore: make(map[string]ValueTuple)}
 
 	kv.rsm = rsm.MakeRSM(servers, me, persister, maxraftstate, kv)
 	// You may need initialization code here.

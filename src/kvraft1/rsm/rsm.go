@@ -128,8 +128,8 @@ func (rsm *RSM) channelReader() {
 				rsm.lastSnapshotTerm = msg.SnapshotTerm
 				rsm.mu.Unlock()
 				if rsm.maxraftstate >= 0 && rsm.maxraftstate <= rsm.rf.PersistBytes() {
-					snapshot := rsm.sm.Snapshot()
-					rsm.rf.Snapshot(msg.CommandIndex, snapshot)
+					snapshot := rsm.sm.Snapshot()               //creating the snapshot of the kv server.
+					rsm.rf.Snapshot(msg.CommandIndex, snapshot) //send the snapshot of the rsm and the kv store to the raft layer.
 				}
 				//log.Printf("applied op eventid: %v", appliedOperation.EventId)
 				//log.Printf("msg command index: %v", msg.CommandIndex)
@@ -160,6 +160,7 @@ func (rsm *RSM) channelReader() {
 					rsm.mu.Unlock()
 				}
 			} else if msg.SnapshotValid {
+				//restoring sent snapshot from raft.
 				rsm.mu.Lock()
 				rsm.sm.Restore(msg.Snapshot)
 				rsm.lastSnapshot = msg.Snapshot
